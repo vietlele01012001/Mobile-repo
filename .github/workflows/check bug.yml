@@ -18,31 +18,33 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y gh jq
 
-    - name: Get all issues
+    - name: Get all issues and format
       id: get-issues
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        # Lấy danh sách các issue
         ISSUES=$(gh issue list --repo ${{ github.repository }} --json number,title,state,createdAt,updatedAt)
-        echo "Raw issues: $ISSUES"
-        # Chuyển đổi JSON thành chuỗi đơn giản
+        
+        # Chuyển đổi danh sách issue thành chuỗi
         FORMATTED_ISSUES=$(echo "$ISSUES" | jq -r '.[] | "Issue #\(.number): \(.title) (\(.state)) - Created at \(.createdAt)"')
-        echo "FORMATTED_ISSUES=$FORMATTED_ISSUES" >> $GITHUB_ENV
+        
+        # Lưu chuỗi đã định dạng vào tệp tạm
+        echo "$FORMATTED_ISSUES" > formatted_issues.txt
 
-    - name: Verify FORMATTED_ISSUES content
+    - name: Verify formatted issues
       run: |
         echo "Formatted issues:"
-        echo "${{ env.FORMATTED_ISSUES }}"
-        if [ -z "${{ env.FORMATTED_ISSUES }}" ]; then
-          echo "No issues found or formatted issues are empty"
-          exit 1
-        fi
+        cat formatted_issues.txt
 
     - name: Send notification to Teams
       env:
         TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-        FORMATTED_ISSUES: ${{ env.FORMATTED_ISSUES }}
       run: |
+        # Đọc nội dung từ tệp
+        FORMATTED_ISSUES=$(cat formatted_issues.txt)
+
+        # Gửi thông báo qua Teams
         PAYLOAD=$(cat <<EOF
         {
           "@type": "MessageCard",
@@ -60,7 +62,7 @@ jobs:
               "markdown": true
             },
             {
-              "text": "${{ env.FORMATTED_ISSUES }}",
+              "text": "$FORMATTED_ISSUES",
               "markdown": true
             }
           ]
