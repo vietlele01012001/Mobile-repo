@@ -16,14 +16,10 @@ jobs:
     - name: Install GitHub CLI
       run: sudo apt-get install -y gh
 
-    - name: Authenticate GitHub CLI
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
-
     - name: Get all issues
       id: get-issues
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         ISSUES=$(gh issue list --repo ${{ github.repository }} --json number,title,state,createdAt,updatedAt --jq '.[] | {number, title, state, createdAt, updatedAt}')
         echo "ISSUE_LIST=$ISSUES" >> $GITHUB_ENV
@@ -34,3 +30,35 @@ jobs:
         if [ -z "${{ env.ISSUE_LIST }}" ]; then
           echo "No issues found or ISSUE_LIST is empty"
           exit 1
+        fi
+
+    - name: Send notification to Teams
+      env:
+        TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        ISSUE_LIST: ${{ env.ISSUE_LIST }}
+      run: |
+        PAYLOAD=$(cat <<EOF
+        {
+          "@type": "MessageCard",
+          "@context": "https://schema.org/extensions",
+          "summary": "Daily GitHub Issue Summary",
+          "themeColor": "0078D7",
+          "title": "Daily Issue Summary",
+          "sections": [
+            {
+              "activityTitle": "Summary of Issues",
+              "facts": [
+                {"name": "Repository", "value": "${{ github.repository }}"},
+                {"name": "Generated At", "value": "$(date)"}
+              ],
+              "markdown": true
+            },
+            {
+              "text": "${{ env.ISSUE_LIST }}",
+              "markdown": true
+            }
+          ]
+        }
+        EOF
+        )
+        curl -H "Content-Type: application/json" -d "$PAYLOAD" "$TEAMS_WEBHOOK_URL"
