@@ -1,0 +1,62 @@
+name: Daily Issue Report
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # Chạy tự động hàng ngày lúc 9h sáng (UTC)
+  workflow_dispatch: # Kích hoạt thủ công từ GitHub Actions UI
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Fetch issues and generate report
+      - name: Fetch issues and generate report
+        id: generate-report
+        run: |
+          echo "Fetching issues and generating report..."
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/issues?state=open > issues.json
+
+          # Process issues with jq
+          jq -r '
+            [
+              .[] |
+              select(.assignee != null) |
+              {
+                assignee: .assignee.login,
+                title: .title,
+                url: .html_url,
+                due: (.milestone.due_on // "No due date")
+              }
+            ] | group_by(.assignee) | 
+            map({
+              assignee: .[0].assignee,
+              issues: map({title, url, due}),
+              total: length
+            })
+          ' issues.json > report.json
+
+          echo "::set-output name=report::$(cat report.json)"
+
+      # Step 3: Send report to Microsoft Teams
+      - name: Send report to Microsoft Teams
+        run: |
+          echo "Preparing Teams notification..."
+          content=$(jq -r 'map("
+          👤 **\(.assignee)**:
+          - Total Issues: \(.total)
+          - Issues:
+          \(.issues | map("* [\(.title)](\(.url)) (Due: \(.due))") | join("\n"))
+          ") | join("\n\n")' report.json)
+
+          curl -H "Content-Type: application/json" \
+            -d "{
+              \"text\": \"🚨 **Daily Issue Report** 🚨\n\n$content\"
+            }" \
+            ${{ secrets.TEAMS_WEBHOOK_URL }}
+
