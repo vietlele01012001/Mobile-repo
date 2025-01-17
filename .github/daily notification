@@ -1,0 +1,55 @@
+name: Daily Issue Summary
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # 9h sáng GMT+7 (GMT+7 = GMT+0 + 7h)
+  workflow_dispatch: # Thêm trigger thủ công
+
+jobs:
+  issue-summary:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v3
+
+    - name: Get all issues
+      id: get-issues
+      run: |
+        ISSUES=$(gh issue list --repo ${{ github.repository }} --json number,title,state,createdAt,updatedAt --jq '.[] | {number, title, state, createdAt, updatedAt}')
+        echo "ISSUE_LIST=$ISSUES" >> $GITHUB_ENV
+
+    - name: Send notification to Teams
+      env:
+        TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        ISSUE_LIST: ${{ env.ISSUE_LIST }}
+      run: |
+        PAYLOAD=$(cat <<EOF
+        {
+          "@type": "MessageCard",
+          "@context": "https://schema.org/extensions",
+          "summary": "Daily GitHub Issue Summary",
+          "themeColor": "0078D7",
+          "title": "Daily Issue Summary",
+          "sections": [
+            {
+              "activityTitle": "Summary of all Issues in Repository",
+              "facts": [
+                {"name": "Repository", "value": "${{ github.repository }}"},
+                {"name": "Generated At", "value": "$(date '+%Y-%m-%d %H:%M:%S')"}
+              ],
+              "markdown": true
+            },
+            {
+              "text": "Here are the issues:",
+              "markdown": true
+            },
+            {
+              "text": "${ISSUE_LIST}",
+              "markdown": true
+            }
+          ]
+        }
+        EOF
+        )
+        curl -H "Content-Type: application/json" -d "$PAYLOAD" "$TEAMS_WEBHOOK_URL"
