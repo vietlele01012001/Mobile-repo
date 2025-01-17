@@ -13,29 +13,35 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v3
 
-    - name: Install GitHub CLI
-      run: sudo apt-get install -y gh
+    - name: Install GitHub CLI and jq
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gh jq
 
     - name: Get all issues
       id: get-issues
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        ISSUES=$(gh issue list --repo ${{ github.repository }} --json number,title,state,createdAt,updatedAt --jq '.[] | {number, title, state, createdAt, updatedAt}')
-        echo "ISSUE_LIST=$ISSUES" >> $GITHUB_ENV
+        ISSUES=$(gh issue list --repo ${{ github.repository }} --json number,title,state,createdAt,updatedAt)
+        echo "Raw issues: $ISSUES"
+        # Chuyển đổi JSON thành chuỗi đơn giản
+        FORMATTED_ISSUES=$(echo "$ISSUES" | jq -r '.[] | "Issue #\(.number): \(.title) (\(.state)) - Created at \(.createdAt)"')
+        echo "FORMATTED_ISSUES=$FORMATTED_ISSUES" >> $GITHUB_ENV
 
-    - name: Verify ISSUE_LIST content
+    - name: Verify FORMATTED_ISSUES content
       run: |
-        echo "Issue list: ${{ env.ISSUE_LIST }}"
-        if [ -z "${{ env.ISSUE_LIST }}" ]; then
-          echo "No issues found or ISSUE_LIST is empty"
+        echo "Formatted issues:"
+        echo "${{ env.FORMATTED_ISSUES }}"
+        if [ -z "${{ env.FORMATTED_ISSUES }}" ]; then
+          echo "No issues found or formatted issues are empty"
           exit 1
         fi
 
     - name: Send notification to Teams
       env:
         TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-        ISSUE_LIST: ${{ env.ISSUE_LIST }}
+        FORMATTED_ISSUES: ${{ env.FORMATTED_ISSUES }}
       run: |
         PAYLOAD=$(cat <<EOF
         {
@@ -54,7 +60,7 @@ jobs:
               "markdown": true
             },
             {
-              "text": "${{ env.ISSUE_LIST }}",
+              "text": "${{ env.FORMATTED_ISSUES }}",
               "markdown": true
             }
           ]
