@@ -11,10 +11,10 @@ jobs:
 
     steps:
     - name: Check out repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v3 # Dùng action để lấy mã nguồn
 
     - name: Install GitHub CLI
-      run: sudo apt-get install -y gh
+      run: sudo apt-get install -y gh # Chạy lệnh cài đặt GitHub CLI
 
     - name: Authenticate GitHub CLI
       env:
@@ -30,4 +30,31 @@ jobs:
 
     - name: Send notification to Teams
       env:
-        TEAMS_WEBHOOK
+        TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        ISSUE_LIST: ${{ env.ISSUE_LIST }}
+      run: |
+        PAYLOAD=$(cat <<EOF
+        {
+          "@type": "MessageCard",
+          "@context": "https://schema.org/extensions",
+          "summary": "Daily GitHub Issue Summary",
+          "themeColor": "0078D7",
+          "title": "Daily Issue Summary",
+          "sections": [
+            {
+              "activityTitle": "Summary of Issues",
+              "facts": [
+                {"name": "Repository", "value": "${{ github.repository }}"},
+                {"name": "Generated At", "value": "$(date)"}
+              ],
+              "markdown": true
+            },
+            {
+              "text": "${{ env.ISSUE_LIST }}",
+              "markdown": true
+            }
+          ]
+        }
+        EOF
+        )
+        curl -H "Content-Type: application/json" -d "$PAYLOAD" "$TEAMS_WEBHOOK_URL"
