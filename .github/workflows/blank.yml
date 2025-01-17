@@ -1,0 +1,19 @@
+name: Notify Teams on New Issue
+
+on:
+  issues:
+    types:
+      - opened  # Kích hoạt workflow khi issue được tạo
+
+jobs:
+  send-notification:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Notify Microsoft Teams
+        run: |
+          curl -H "Content-Type: application/json" \
+               -d '{
+                 "text": "🔔 A new issue has been created in the repository: *${{ github.event.repository.full_name }}*.\n\n**Title:** ${{ github.event.issue.title }}\n**Description:** ${{ github.event.issue.body }}\n**URL:** ${{ github.event.issue.html_url }}"
+               }' \
+               ${{ secrets.TEAMS_WEBHOOK_URL }}
